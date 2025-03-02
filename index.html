@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gravity Vortex</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #000;
+            font-family: 'Arial', sans-serif;
+        }
+        
+        #gameCanvas {
+            background: radial-gradient(circle at center, #1a0f33, #000);
+        }
+
+        #hud {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            color: #fff;
+            font-size: 24px;
+            text-shadow: 0 0 10px #0ff;
+        }
+
+        #instructions {
+            position: fixed;
+            bottom: 20px;
+            width: 100%;
+            text-align: center;
+            color: #0ff;
+            font-size: 18px;
+            text-shadow: 0 0 10px rgba(0,255,255,0.5);
+        }
+
+        .vortex-effect {
+            position: fixed;
+            width: 100vw;
+            height: 100vh;
+            pointer-events: none;
+            background: radial-gradient(circle at 50% 50%, 
+                rgba(0,255,255,0.1) 0%,
+                rgba(0,255,255,0) 70%);
+        }
+    </style>
+</head>
+<body>
+    <div id="hud">Gravity Charges: <span id="charges">3</span></div>
+    <div id="instructions">CLICK or TAP to flip gravity | Collect stars to regain charges</div>
+    <canvas id="gameCanvas"></canvas>
+    <div class="vortex-effect"></div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Set canvas size
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        // Game state
+        let player = {
+            x: canvas.width/2,
+            y: canvas.height/2,
+            size: 30,
+            color: '#0ff',
+            velocityY: 0,
+            onGround: false
+        };
+
+        let gravity = 1;
+        let rotation = 0;
+        let charges = 3;
+        let stars = [];
+        let platforms = [];
+        let particles = [];
+
+        // Generate initial level
+        function generateLevel() {
+            platforms = [];
+            stars = [];
+            
+            // Create spiral platforms
+            for(let i = 0; i < 50; i++) {
+                platforms.push({
+                    x: Math.cos(i/5) * i*15 + canvas.width/2,
+                    y: Math.sin(i/5) * i*15 + canvas.height/2,
+                    width: 100,
+                    height: 20,
+                    color: `hsl(${i*7}, 70%, 50%)`
+                });
+            }
+
+            // Add random stars
+            for(let i = 0; i < 10; i++) {
+                stars.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    size: 15,
+                    collected: false
+                });
+            }
+        }
+
+        // Gravity flip effect
+        function flipGravity() {
+            if(charges <= 0) return;
+            charges--;
+            document.getElementById('charges').textContent = charges;
+            
+            gravity *= -1;
+            rotation += 180;
+            
+            // Add visual effect particles
+            for(let i = 0; i < 100; i++) {
+                particles.push({
+                    x: player.x,
+                    y: player.y,
+                    size: Math.random() * 4 + 2,
+                    color: `hsl(${Math.random()*360}, 100%, 50%)`,
+                    angle: Math.random() * Math.PI * 2,
+                    speed: Math.random() * 5 + 2,
+                    life: 1
+                });
+            }
+        }
+
+        // Input handling
+        canvas.addEventListener('click', flipGravity);
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            flipGravity();
+        });
+
+        // Game loop
+        function update() {
+            // Apply gravity
+            player.velocityY += gravity * 0.5;
+            player.y += player.velocityY;
+
+            // Platform collisions
+            player.onGround = false;
+            platforms.forEach(platform => {
+                if(player.x < platform.x + platform.width &&
+                   player.x + player.size > platform.x &&
+                   player.y + player.size < platform.y + platform.height &&
+                   player.y + player.size + player.velocityY > platform.y) {
+                    player.velocityY = 0;
+                    player.y = platform.y - player.size;
+                    player.onGround = true;
+                }
+            });
+
+            // Star collection
+            stars.forEach(star => {
+                if(!star.collected && 
+                   Math.hypot(player.x - star.x, player.y - star.y) < player.size + star.size) {
+                    star.collected = true;
+                    charges++;
+                    document.getElementById('charges').textContent = charges;
+                }
+            });
+
+            // Particle updates
+            particles = particles.filter(p => {
+                p.x += Math.cos(p.angle) * p.speed;
+                p.y += Math.sin(p.angle) * p.speed;
+                p.life -= 0.02;
+                return p.life > 0;
+            });
+
+            requestAnimationFrame(draw);
+        }
+
+        function draw() {
+            // Clear canvas
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Rotate canvas
+            ctx.save();
+            ctx.translate(canvas.width/2, canvas.height/2);
+            ctx.rotate(rotation * Math.PI/180);
+            ctx.translate(-canvas.width/2, -canvas.height/2);
+
+            // Draw platforms
+            platforms.forEach(platform => {
+                ctx.fillStyle = platform.color;
+                ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
+            });
+
+            // Draw stars
+            stars.forEach(star => {
+                if(!star.collected) {
+                    ctx.beginPath();
+                    ctx.arc(star.x, star.y, star.size, 0, Math.PI*2);
+                    ctx.fillStyle = '#ff0';
+                    ctx.fill();
+                    ctx.strokeStyle = '#fa0';
+                    ctx.stroke();
+                }
+            });
+
+            // Draw player
+            ctx.fillStyle = player.color;
+            ctx.beginPath();
+            ctx.arc(player.x, player.y, player.size, 0, Math.PI*2);
+            ctx.fill();
+            
+            // Draw particles
+            particles.forEach(p => {
+                ctx.fillStyle = `hsla(${p.color.split(',')[0]}, ${p.life*100}%)`;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI*2);
+                ctx.fill();
+            });
+
+            ctx.restore();
+            update();
+        }
+
+        generateLevel();
+        draw();
+    </script>
+</body>
+</html>
